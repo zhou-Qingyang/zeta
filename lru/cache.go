@@ -2,7 +2,6 @@ package main
 
 import (
 	"container/list"
-	"sync"
 )
 
 type LruCache struct {
@@ -10,7 +9,6 @@ type LruCache struct {
 	nBytes   int64 // 是当前已使用的内存
 	ll       *list.List
 	cache    map[string]*list.Element
-	mu       sync.Mutex
 }
 
 // Value use Len to count how many bytes it takes
@@ -28,14 +26,10 @@ func NewCache(maxBytes int64) *LruCache {
 		maxBytes: maxBytes,
 		ll:       list.New(),
 		cache:    make(map[string]*list.Element),
-		mu:       sync.Mutex{},
 	}
 }
 
 func (c *LruCache) Get(key string) (Value, bool) {
-	// 获取值 在将map 进行更新
-	c.mu.Lock() // 假设 c.mu 是 sync.Mutex
-	defer c.mu.Unlock()
 	if e, ok := c.cache[key]; ok {
 		c.ll.MoveToBack(e) // 将元素移动到队尾
 		return e.Value.(*entry).value, true
@@ -44,8 +38,6 @@ func (c *LruCache) Get(key string) (Value, bool) {
 }
 
 func (c *LruCache) Remove(key string) bool {
-	c.mu.Lock() // 假设 c.mu 是 sync.Mutex
-	defer c.mu.Unlock()
 	if e, ok := c.cache[key]; ok {
 		c.ll.Remove(e)
 		kz := e.Value.(*entry)
@@ -73,9 +65,6 @@ func (c *LruCache) Insert(key string, value Value) bool {
 	if valSize > c.maxBytes {
 		return false // 单条数据过大，直接拒绝
 	}
-
-	c.mu.Lock() // 假设 c.mu 是 sync.Mutex
-	defer c.mu.Unlock()
 
 	if e, ok := c.cache[key]; ok {
 		c.ll.MoveToBack(e)
