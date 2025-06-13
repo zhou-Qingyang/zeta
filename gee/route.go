@@ -1,4 +1,4 @@
-package gee
+package main
 
 import (
 	"fmt"
@@ -67,6 +67,7 @@ func (r *routers) handle(c *GeeContext) {
 	} else {
 		c.String(http.StatusNotFound, fmt.Sprintf("404 page not found: %s", c.Path))
 	}
+	c.Next()
 }
 
 func (r *routers) getRoute(method string, path string) (*node, map[string]string) {

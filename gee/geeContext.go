@@ -1,10 +1,23 @@
-package gee
+package main
 
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"time"
 )
+
+func Logger() HandlerFunc {
+	return func(c *GeeContext) {
+		// Start timer
+		t := time.Now()
+		// Process request
+		c.Next()
+		// Calculate resolution time
+		log.Printf("[%d] %s in %v", c.StatusCode, c.r.RequestURI, time.Since(t))
+	}
+}
 
 type GeeContext struct {
 	w http.ResponseWriter
@@ -15,6 +28,9 @@ type GeeContext struct {
 	Params map[string]string
 	// response info
 	StatusCode int
+
+	handlers []HandlerFunc
+	index    int
 }
 
 func NewContext(w http.ResponseWriter, r *http.Request) *GeeContext {
@@ -23,6 +39,7 @@ func NewContext(w http.ResponseWriter, r *http.Request) *GeeContext {
 		r:      r,
 		Path:   r.URL.Path,
 		Method: r.Method,
+		index:  -1,
 	}
 }
 func (c *GeeContext) Param(key string) string {
@@ -37,6 +54,17 @@ func (c *GeeContext) SetStatusCode(code int) {
 
 func (c *GeeContext) PostForm(key string) string {
 	return c.r.FormValue(key)
+}
+
+func (c *GeeContext) Next() {
+	c.index++
+	for ; c.index < len(c.handlers); c.index++ {
+		c.handlers[c.index](c)
+	}
+}
+
+func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
+	group.middlewares = append(group.middlewares, middlewares...)
 }
 
 func (c *GeeContext) Query(key string) string {
