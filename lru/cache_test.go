@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-// type String string
-//
-//	func (s String) Len() int {
-//		return len(s)
-//	}
+type String string
+
+func (s String) Len() int {
+	return len(s)
+}
 func TestLRUCacheGet(t *testing.T) {
 	lru := NewCache(1000)
 	lru.Insert("key1", String("value1"))

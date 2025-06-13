@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/zhou-Qingyang/hrm/ZetaCache/lru/pb"
+	"github.com/zhou-Qingyang/hrm/ZetaCache/lru/singleflight"
+	"log"
 	"sync"
 )
 
@@ -21,6 +24,8 @@ type Group struct {
 	getter    Getter
 	name      string
 	mainCache ByteCache
+	peers     PeerPicker
+	loader    *singleflight.Group
 }
 
 var (
@@ -40,6 +45,7 @@ func NewGroup(name string, maxSize int64, getter Getter) *Group {
 		mainCache: ByteCache{
 			cacheBytes: maxSize,
 		},
+		loader: &singleflight.Group{},
 	}
 	groups[name] = group
 	return group
@@ -51,15 +57,55 @@ func GetGroup(name string) *Group {
 	return groups[name]
 }
 
-func (group *Group) Get(key string) (ByteView, error) {
-	if key == "" {
-		return ByteView{}, nil
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
 	}
-	if val, ok := group.mainCache.get(key); ok {
-		fmt.Println("cache hit")
-		return val, nil
+	g.peers = peers
+}
+
+func (group *Group) Get(key string) (value ByteView, err error) {
+	//if key == "" {
+	//	return ByteView{}, nil
+	//}
+	//if val, ok := group.mainCache.get(key); ok {
+	//	fmt.Println("cache hit")
+	//	return val, nil
+	//}
+	//return group.loadLocally(key)
+	viewi, err := group.loader.Do(key, func() (interface{}, error) {
+		if group.peers != nil {
+			if peer, ok := group.peers.PickPeer(key); ok {
+				if value, err := group.getFromPeer(peer, key); err == nil {
+					return value, nil
+				}
+				log.Println("[GeeCache] Failed to get from peer")
+			}
+		}
+		return group.loadLocally(key)
+	})
+	if err == nil {
+		return viewi.(ByteView), nil
 	}
-	return group.loadLocally(key)
+	return
+}
+
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	//bytes, err := peer.Get(g.name, key)
+	//if err != nil {
+	//	return ByteView{}, err
+	//}
+	//return ByteView{b: bytes}, nil
+	req := &pb.Request{
+		Group: g.name,
+		Key:   key,
+	}
+	res := &pb.Response{}
+	err := peer.Get(req, res)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: res.Value}, nil
 }
 
 func (group *Group) loadLocally(key string) (ByteView, error) {
